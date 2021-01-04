@@ -1,3 +1,4 @@
+#ifndef __GENERATOR_H_
 #define __GENERATOR_H_
 #include "general.h"
 
