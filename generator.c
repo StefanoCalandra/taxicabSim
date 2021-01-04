@@ -1,4 +1,3 @@
-@ -1,10 +1,29 @@
 #include "generator.h"
 #include "general.h"
 #include <stdio.h>
