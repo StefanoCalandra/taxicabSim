@@ -9,3 +9,4 @@ void logmsg(char *message) {
 }
 
 #endif /*__TAXI_H_*/
+ 
