@@ -34,8 +34,6 @@ enum Level { RUNTIME, DB };
 
 typedef struct {
   int ;
-  int ;
-  int ;
 } Viaggi;
 
 typedef struct {
@@ -43,7 +41,7 @@ typedef struct {
 } Mappa;
 
 typedef struct {
-  ;
+  int SO_TAXI, SO_TIMENSEC_MIN, SO_TIMENSEC_MAX, SO_TIMEOUT, SO_DURATION;
 } Taxi;
 
 #endif /* __MASTER_H_ */
