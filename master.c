@@ -1,8 +1,5 @@
 #include "master.h"
 
-void ;
-int ;
-
 int main(int argc, char **argv) 
 {
   int shmid;
