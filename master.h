@@ -3,12 +3,6 @@
 #include <stdlib.h>
 #include "general.h"
 
-void ();
-
-void ();
-
-void printMap(Cell (*)[SO_WIDTH][SO_HEIGHT]);
-
 void logmsg(char *, enum Level);
 
 void SIGINThandler(int);
