@@ -1,20 +1,31 @@
 #include "generator.h"
+#include "general.h"
 
-int *executing,shmid_ex, shmid_map, qid;
-void *mapptr;
-Point Sources[MAX_SOURCES];
+int *executing, shmid_ex, shmid_map, shmid_sources, qid, sem_idW, sem_idR;
+void *mapptr, *sources_ptr;
 
 int main(int argc, char **argv) {
   Config conf;
   int i, xArg, yArg;
   int found = 0;
-  key_t shmkey, qkey;
+  key_t shmkey, qkey, semkeyW, semkeyR;
   char xArgBuffer[20], yArgBuffer[20];
   char *args[4];
   char *envp[1];
 
+
+  union semun argR, argW;
+  unsigned short semval[SO_WIDTH*SO_HEIGHT];
+  int cnt;
+  struct semid_ds idR, idW;
+  for(cnt=0; cnt<SO_WIDTH*SO_HEIGHT; cnt++)
+  	semval[cnt] = 0;
+
+
   /************ INIT ************/
-  if ((shmkey = ftok("makefile", 'a')) < 0) {
+  logmsg("Initialization", DB);
+if ((shmkey = ftok("makefile", 'a')) < 0) {
+	printf("shmget error\n");
     EXIT_ON_ERROR
   }
 
@@ -25,12 +36,13 @@ int main(int argc, char **argv) {
   if ((executing = shmat(shmid_ex, NULL, 0)) < (int *)0) {
     EXIT_ON_ERROR
   }
-  if ((shmkey = ftok("makefile", 'd')) < 0) {
+  if ((shmkey = ftok("makefile", 'm')) < 0) {
+  	printf("shmget error\n");
     EXIT_ON_ERROR
   }
 
-  if ((shmid_map = shmget(shmkey, SO_WIDTH * SO_HEIGHT * sizeof(Cell),
-                      IPC_CREAT | 0644)) < 0) {
+  if ((shmid_map = shmget(shmkey, SO_WIDTH * SO_HEIGHT * sizeof(Cell), IPC_CREAT | 0666)) <
+      0) {
     EXIT_ON_ERROR
   }
 
@@ -38,26 +50,77 @@ int main(int argc, char **argv) {
     EXIT_ON_ERROR
   }
 
-  if ((qkey = ftok("makefile", 'd')) < 0) {
+  if ((shmkey = ftok("makefile", 's')) < 0) {
+  	printf("shmget error\n");
+    EXIT_ON_ERROR
+  }
+
+  if ((shmid_sources = shmget(shmkey, MAX_SOURCES * sizeof(Point),
+                              IPC_CREAT | 0666)) < 0) {
+    EXIT_ON_ERROR
+  }
+
+  if ((sources_ptr = shmat(shmid_sources, NULL, 0)) < (void *)0) {
+    EXIT_ON_ERROR
+  }
+
+  if ((qkey = ftok("makefile", 'q')) < 0) {
     EXIT_ON_ERROR
   }
   if ((qid = msgget(qkey, IPC_CREAT | 0644)) < 0) {
     EXIT_ON_ERROR
   }
-  *executing = 1;
+  
+  
+  if((semkeyR = ftok("makefile", 'r')) < 0){
+  	printf("ftok error\n");
+  	EXIT_ON_ERROR
+  }
+  argR.buf = &idR;
+  argR.array = semval;
+  if((sem_idR = semget(semkeyR, SO_WIDTH*SO_HEIGHT, IPC_CREAT | 0666)) < 0){
+    printf("semget error\n");
+  	EXIT_ON_ERROR
+  }
+  if(semctl(sem_idR,0,SETALL, argR) < 0){
+    printf("semctl error\n");
+  	EXIT_ON_ERROR
+  }
+  
+  if((semkeyW = ftok("makefile", 'w')) < 0){
+    printf("ftok error\n");
+  	EXIT_ON_ERROR
+  }
+  if((sem_idW = semget(semkeyW, SO_WIDTH*SO_HEIGHT, IPC_CREAT | 0666)) < 0){
+  	printf("semget error\n");
+  	EXIT_ON_ERROR
+  }
+  argW.buf = &idW;
+  argW.array = semval;
+  if(semctl(sem_idW,0,SETALL, argW) < 0){
+  	printf("semctl error\n");
+  	EXIT_ON_ERROR
+  }
+  
   parseConf(&conf);
+  ((Cell(*)[8][8])mapptr)[4][0]->state = FREE;
+  logmsg("Generate map...", DB);
   generateMap(mapptr, &conf);
   signal(SIGINT, SIGINThandler);
   signal(SIGALRM, ALARMhandler);
+  logmsg("Init complete", DB);
   /************ END-INIT ************/
 
+  logmsg("Printing map...", DB);
   printMap(mapptr);
-  if(DEBUG) sleep(1);
+  if (DEBUG)
+    sleep(1);
 
   logmsg("Forking Sources...", DB);
-  if(DEBUG) usleep(2000000);
+  if (DEBUG)
+    usleep(2000000);
   for (i = 0; i < conf.SO_SOURCES; i++) {
-    if(DEBUG){
+    if (DEBUG) {
       printf("\tSource n. %d created\n", i);
       sleep(1);
     }
@@ -65,8 +128,8 @@ int main(int argc, char **argv) {
     case -1:
       EXIT_ON_ERROR
     case 0:
-      xArg = (rand() % SO_WIDTH);
-      yArg = (rand() % SO_HEIGHT);
+      xArg = ((Point(*)[MAX_SOURCES])sources_ptr)[i]->x;
+      yArg = ((Point(*)[MAX_SOURCES])sources_ptr)[i]->y;
       snprintf(xArgBuffer, 20, "%d", xArg);
       snprintf(yArgBuffer, 20, "%d", yArg);
       args[0] = "source";
@@ -82,7 +145,7 @@ int main(int argc, char **argv) {
 
   logmsg("Forking Taxis...", DB);
   for (i = 0; i < conf.SO_TAXI; i++) {
-    if(DEBUG){
+    if (DEBUG) {
       printf("\tTaxi n. %d created\n", i);
       sleep(1);
     }
@@ -111,7 +174,6 @@ int main(int argc, char **argv) {
   }
   exit(0);
 }
-
 
 /*
  * Parses the file taxicab.conf in the source directory and populates the Config
@@ -166,9 +228,7 @@ int checkNoAdiacentHoles(Cell (*matrix)[SO_WIDTH][SO_HEIGHT], int x, int y) {
   int i, j;
   for (i = 0; i < 3; i++) {
     for (j = 0; j < 3; j++) {
-      if ((x + i - 1) >= 0 &&
-          (x + i - 1) <= SO_WIDTH &&
-          (y + j - 1) >= 0 &&
+      if ((x + i - 1) >= 0 && (x + i - 1) <= SO_WIDTH && (y + j - 1) >= 0 &&
           (y + j - 1) <= SO_HEIGHT &&
           matrix[x + i - 1][y + j - 1]->state == HOLE) {
         b = 1;
@@ -206,20 +266,20 @@ void generateMap(Cell (*matrix)[SO_WIDTH][SO_HEIGHT], Config *conf) {
       i++;
     }
   }
+  logmsg("Generating Sources...", DB);
   for (i = 0; i < conf->SO_SOURCES; i++) {
     x = rand() % SO_WIDTH;
     y = rand() % SO_HEIGHT;
 
     if (matrix[x][y]->state == FREE) {
       matrix[x][y]->state = SOURCE;
-      Sources[i].x = x;
-      Sources[i].y = y;
+      ((Point(*)[MAX_SOURCES])sources_ptr)[i]->x = x;
+      ((Point(*)[MAX_SOURCES])sources_ptr)[i]->y = y;
     } else {
       i--;
     }
   }
 }
-
 
 /*
  * Print on stdout the map in a readable format:
@@ -247,7 +307,7 @@ void printMap(Cell (*map)[SO_WIDTH][SO_HEIGHT]) {
 }
 
 void logmsg(char *message, enum Level l) {
-  if(l <= DEBUG){
+  if (l <= DEBUG) {
     printf("[generator-%d] %s\n", getpid(), message);
   }
 }
@@ -255,19 +315,19 @@ void logmsg(char *message, enum Level l) {
 /*  Signal Handlers  */
 void SIGINThandler(int sig) {
   printf("=============== Received SIGINT ==============\n");
-  /* *executing = 0; */
-  while(wait(NULL) > 0){}
-  shmdt(executing);
+  while (wait(NULL) > 0) {
+  }
   shmdt(mapptr);
-  if(shmctl(shmid_ex, IPC_RMID, NULL)){
-    printf("\nError in shmctl: ex,\n");
+  shmdt(sources_ptr);
+  if (shmctl(shmid_sources, IPC_RMID, NULL)) {
+    printf("\nError in shmctl: sources,\n");
     EXIT_ON_ERROR
   }
-  if(shmctl(shmid_map, IPC_RMID, NULL)){
+  if (shmctl(shmid_map, IPC_RMID, NULL)) {
     printf("\nError in shmctl: map,\n");
     EXIT_ON_ERROR
   }
-  if(msgctl(qid, IPC_RMID, NULL)){
+  if (msgctl(qid, IPC_RMID, NULL)) {
     printf("\nError in msgctl,\n");
     EXIT_ON_ERROR
   }
