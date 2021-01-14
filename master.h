@@ -7,10 +7,10 @@ void ();
 
 void ();
 
-void ();
-
-void SIGINThandler(int);
+void printMap(Cell (*)[SO_WIDTH][SO_HEIGHT]);
 
 void logmsg(char *, enum Level);
+
+void SIGINThandler(int);
 
 #endif /* __MASTER_H_ */
