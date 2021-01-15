@@ -77,7 +77,7 @@
 [[file:/home/dan/Code/C/Taxicab/taxicab.conf][File]]
 - SO_TAXI
   + n taxi
-- SO_SOURCE
+- SO_SOURCE 
   + n sources
 - SO_HOLES
   + n holes
