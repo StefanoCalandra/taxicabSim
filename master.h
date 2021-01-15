@@ -5,6 +5,4 @@
 
 void logmsg(char *, enum Level);
 
-void SIGINThandler(int);
-
 #endif /* __MASTER_H_ */
