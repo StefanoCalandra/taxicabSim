@@ -1,6 +1,5 @@
 !*.c
-*.o
-taxi
-taxicab
-generator
+!*.h
+!makefile
+*
 !README.org
