@@ -1,1 +1,5 @@
- !*.c
+!*.c
+!*.h
+!makefile
+*
+!README.org
