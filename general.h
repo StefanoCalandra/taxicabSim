@@ -8,22 +8,32 @@
 #include <string.h>
 #include <sys/ipc.h>
 #include <sys/msg.h>
+#include <sys/sem.h>
 #include <sys/shm.h>
 #include <sys/types.h>
 #include <sys/wait.h>
-#include <time.h> /* rand */
+#include <time.h>
 #include <unistd.h>
-#define SO_WIDTH 4 /* a tempo di compilazione */
-#define SO_HEIGHT 4
-#define MAX_SOURCES (SO_WIDTH * SO_HEIGHT / 3)
+
+#ifndef DEBUG /* DEBUG by setting when compiling -DDEBUG=1 */
+#define DEBUG 0
+#endif
+
+#define SO_WIDTH 60 /* a tempo di compilazione */
+#define SO_HEIGHT 20
 #define EXIT_ON_ERROR                                                          \
   if (errno) {                                                                 \
     fprintf(stderr, "%d: pid %ld; errno: %d (%s)\n", __LINE__, (long)getpid(), \
             errno, strerror(errno));                                           \
-    exit(EXIT_FAILURE);                                                        \
+    raise(SIGINT);                                                             \
   }
 
+#define ANSI_COLOR_RED "\x1b[31m"
+#define ANSI_COLOR_RESET "\x1b[0m"
+
 enum type { FREE, SOURCE, HOLE };
+
+enum Level { RUNTIME, DB, SILENCE };
 
 typedef struct {
   enum type state;
@@ -33,8 +43,8 @@ typedef struct {
 } Cell;
 
 typedef struct {
-  int SO_TAXI, SO_SOURCES, SO_HOLES, SO_CAP_MIN, SO_CAP_MAX, SO_TIMENSEC_MIN,
-      SO_TIMENSEC_MAX, SO_TIMEOUT, SO_DURATION;
+  int SO_TAXI, SO_SOURCES, SO_HOLES, SO_TOP_CELLS, SO_CAP_MIN, SO_CAP_MAX,
+      SO_TIMENSEC_MIN, SO_TIMENSEC_MAX, SO_TIMEOUT, SO_DURATION;
 } Config;
 
 typedef struct {
@@ -43,33 +53,31 @@ typedef struct {
 
 typedef struct {
   long type;
-  Point source;
   Point destination;
 } Message;
 
-/*
- * Print on stdout the map in a readable format:
- *     FREE Cells are printed as   [ ]
- *     SOURCE Cells are printed as [S]
- *     HOLE Cells are printed as   [H]
- */
-void printMap(Cell (*map)[SO_WIDTH][SO_HEIGHT]) {
-  int x, y;
-  for (y = 0; y < SO_HEIGHT; y++) {
-    for (x = 0; x < SO_WIDTH; x++) {
-      switch (map[x][y]->state) {
-      case FREE:
-        printf("[ ]");
-        break;
-      case SOURCE:
-        printf("[S]");
-        break;
-      case HOLE:
-        printf("[X]");
-      }
-    }
-    printf("\n");
-  }
-}
+typedef struct {
+  long type;
+  int requests;
+} MasterMessage;
+
+int isFree(Cell (*map)[][SO_HEIGHT], Point p);
+
+void semWait(Point, int);
+
+void semSignal(Point, int);
+
+void semSync(int);
+
+void lock(int);
+
+void unlock(int);
+
+union semun {
+  int val;
+  struct semid_ds *buf;
+  unsigned short *array;
+  struct seminfo *__buf;
+};
 
 #endif /* __GENERAL_H_ */
